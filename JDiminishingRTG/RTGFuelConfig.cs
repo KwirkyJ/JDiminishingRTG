@@ -36,10 +36,8 @@ namespace JDiminishingRTG
         }
         
         private static ConfigNode getResourceConfigNode(string name) {
-            //foreach (ConfigNode r in GameDatabase.Instance.GetConfigNodes("RESOURCE_DEFINITION")) {
-            List<ConfigNode> nodes = GameDatabase.Instance.GetConfigNodes("RESOURCE_DEFINITION");
-            for (i=0; nodes.Count; i++) {
-                if nodes[i].GetValue ("name") == name {
+            foreach (ConfigNode r in GameDatabase.Instance.GetConfigNodes("RESOURCE_DEFINITION")) {
+                if (r.GetValue ("name") == name) {
                     return r;
                 }
             }
