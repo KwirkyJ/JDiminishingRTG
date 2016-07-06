@@ -267,6 +267,23 @@ namespace JDiminishingRTG
             this.updateUIOutput(this.output, this.efficiency);
         }
         
+        private void updateUIOutput (float output, float efficiency) {
+            float tmpout = output;
+            string units = HeatUnits;
+            if (GenerateElectricity) {
+                tmpout = output * efficiency * ElectricityScale;
+                units = ElectricityUnits;
+            }
+            if (tmpout < 1) {
+                units = units + "/min";
+                tmpout = tmpout * 60F;
+            } else {
+                units = units + "/s";
+            }
+            Fields ["guiOutput"].guiUnits = " " + units;
+            this.guiOutput = String.Format ("{0:##.##}", tmpout);
+        }
+        
         public override void OnFixedUpdate ()
         {
             float now = (float)Planetarium.GetUniversalTime ();
@@ -282,7 +299,7 @@ namespace JDiminishingRTG
             rtg_res.amount = rtg_res.maxAmount * progress
             this.output = this.fuelPep * ((float)rtg_res.amount * this.fuelDensity) * HeatScale;
             this.part.mass = this.mass - ((float)rtg_res.amount * this.fuelDensity);
-            this.updateUIOutput(this.output, this.efficiency);
+            //this.updateUIOutput(this.output, this.efficiency);
 
             //this.updateRTGFuelAmount (rtg_res, progress);
             //this.updateOutput (rtg_res);
@@ -295,30 +312,13 @@ namespace JDiminishingRTG
             //this.updatePartMass (rtg_res);
         }
         
-        private PartResource getRTGResource(string resname){
-            foreach (PartResource r in this.part.GetComponents<PartResource> ()) {
+        private PartResource getRTGResource (string resname) {
+            foreach (PartResource r in this.part.Resources.list) {
                 if (r.resourceName == resname) {
                     return r;
                 }
             }
             return null;
-        }
-        
-        private void updateUIOutput(float output, float efficiency) {
-            float tmpout = output;
-            string units = HeatUnits;
-            if (GenerateElectricity) {
-                tmpout = output * efficiency * ElectricityScale;
-                units = ElectricityUnits;
-            }
-            if (tmpout < 1) {
-                units = units + "/min";
-                tmpout = tmpout * 60F;
-            } else {
-                units = units + "/s";
-            }
-            Fields ["guiOutput"].guiUnits = " " + units;
-            this.guiOutput = String.Format ("{0:##.##}", tmpout);
         }
 
 //        private void updateRTGFuelAmount (PartResource res, double progress)
