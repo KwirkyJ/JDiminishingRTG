@@ -98,6 +98,8 @@ namespace JDiminishingRTG
         }
 
         #region configLoading
+        //SEE http://docuwiki-kspapi.rhcloud.com/#/classes/UI_ChooseOption
+        //    http://forum.kerbalspaceprogram.com/index.php?/topic/135891-ui_chooseoption-oddities-when-displaying-long-names/
         private static void ReadCustomConfigs()
         {
 			Debug.Log ("[JDimRTG] Reading configs...");
@@ -289,7 +291,8 @@ namespace JDiminishingRTG
             float now = (float)Planetarium.GetUniversalTime ();
             this.timeOfStart = (this.timeOfStart < 0) ? now : this.timeOfStart;
             
-            PartResource rtg_res = this.getRTGResource(this.name);
+            //PartResource rtg_res = this.getRTGResource(this.name);
+            PartResource rtg_res = this.part.Resources.Where(r => r.resourceName == this.name);
             if (!rtg_res) { 
                 Debug.LogError ("[JDimRTG] Module resource '" + name + "' has no matching PartResource");
                 return;
@@ -312,14 +315,15 @@ namespace JDiminishingRTG
             //this.updatePartMass (rtg_res);
         }
         
-        private PartResource getRTGResource (string resname) {
-            foreach (PartResource r in this.part.Resources.list) {
-                if (r.resourceName == resname) {
-                    return r;
-                }
-            }
-            return null;
-        }
+//        private PartResource getRTGResource (string resname) {
+        //    foreach (PartResource r in this.part.Resources.list) {
+        //        if (r.resourceName == resname) {
+        //            return r;
+        //        }
+        //    }
+        //    return null;
+//            return this.part.Resources.list.where(r => r.resourceName == resname)
+//        }
 
 //        private void updateRTGFuelAmount (PartResource res, double progress)
 //        {
