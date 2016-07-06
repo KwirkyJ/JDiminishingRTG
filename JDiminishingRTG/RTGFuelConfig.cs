@@ -1,10 +1,8 @@
 /*
- * Copyright KwirkyJ (Jake Smith)
+ * Copyright Jake "KwirkyJ" Smith) <kwirkyj.smith0@gmail.com>
  * 
- * Available for used under the LGPL v3 license.
- * You may use, recompile, modify, and redistribute with this license
- * and attribution.
- */
+ * Available for use under the LGPL v3 license.
+ */ 
 using System;
 using UnityEngine;
 
@@ -13,58 +11,39 @@ namespace JDiminishingRTG
     public class RTGFuelConfig
     {
         public string resourceName { get; private set; }
-        public float halflife { get; private set; }
-        public float pep { get; private set; }
-        public float density { get; private set; }
+        public float  halflife     { get; private set; }
+        public float  pep          { get; private set; }
+        public float  density      { get; private set; }
+        
+        private static float DEFAULT_PEP      =   0;
+        private static float DEFAULT_HALFLIFE = 100;
 
         public RTGFuelConfig (ConfigNode node)
         {
-            this.resourceName = "";
-            this.halflife = 100;
-            this.pep = 0;
-            this.density = 0;
-
-            if (node.HasValue ("name")) 
-            {
-                bool matched = false;
-                this.resourceName = node.GetValue ("name");
-                foreach (ConfigNode r in GameDatabase.Instance.GetConfigNodes("RESOURCE_DEFINITION")) 
-                {
-                    if (r.GetValue ("name") == this.resourceName) 
-                    {
-                        matched = true;
-                        this.density = float.Parse (r.GetValue ("density"));
-                        break;
-                    }
+            if (!node.HasValue ("name")) {
+                throw new FormatException ("RTGFuelConfig node lacking 'name'");
+            }
+            this.resourceName = node.GetValue ("name");
+            ConfigNode resource_node = getResourceConfigNode(this.resourceName);
+            if (!resource_node) {
+                throw new MissingFieldException ("resource '" + this.resourceName + "' not matched in gamedatabase");
+            }
+            this.density  = float.Parse (resource_node.GetValue ("density"));
+            this.halflife = (node.hasValue ("halflife")) ? float.Parse (node.GetValue ("halflife"))
+                                                         : DEFAULT_HALFLIFE;
+            this.pep = (node.HasValue ("pep")) ? 1000F * float.Parse (node.GetValue ("pep"))
+                                               : DEFAULT_PEP;
+        }
+        
+        private static ConfigNode getResourceConfigNode(string name) {
+            //foreach (ConfigNode r in GameDatabase.Instance.GetConfigNodes("RESOURCE_DEFINITION")) {
+            List<ConfigNode> nodes = GameDatabase.Instance.GetConfigNodes("RESOURCE_DEFINITION");
+            for (i=0; nodes.Count; i++) {
+                if nodes[i].GetValue ("name") == name {
+                    return r;
                 }
-                if (!matched) 
-                {
-                    // desired behavior?
-                    throw new MissingFieldException ("resource '" + this.resourceName + "' not matched in gamedatabase");
-                }
-            } 
-            else 
-            {
-                throw new FormatException ("RTGfuelconfig lacking 'name' node");
             }
-
-            if (node.HasValue ("halflife")) 
-            {
-                this.halflife = float.Parse (node.GetValue ("halflife"));
-            } 
-            else 
-            {
-                // throw new FormatException ("RTGfuelconfig lacking 'halflife' node");
-            }
-
-            if (node.HasValue ("pep")) 
-            {
-                this.pep = 1000F * float.Parse (node.GetValue ("pep"));
-            } 
-            else 
-            {
-                // throw new FormatException ("RTGfuelconfig lacking 'pep' node");
-            }
+            return null;
         }
     }
 }

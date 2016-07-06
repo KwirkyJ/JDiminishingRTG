@@ -1,10 +1,8 @@
 /*
- * Copyright KwirkyJ (Jake Smith)
+ * Copyright Jake "KwirkyJ" Smith) <kwirkyj.smith0@gmail.com>
  * 
- * Available for used under the LGPL v3 license.
- * You may use, recompile, modify, and redistribute with this license
- * and attribution.
- */
+ * Available for use under the LGPL v3 license.
+ */ 
 using System;
 using System.Collections.Generic;
 using System.Reflection;
@@ -56,7 +54,7 @@ namespace JDiminishingRTG
         private static List<RTGFuelConfig> RTGFuelConfigList;
 
         private static bool GenerateElectricity = false;
-        private static bool GenerateHeat = true;
+        private static bool GenerateHeat        = true;
         
         private static string PowerDensityUnits  = "W/kg"; 
         private static string PowerDensityLabel  = "pep";
@@ -88,14 +86,14 @@ namespace JDiminishingRTG
         }
 
         public override void OnStart (StartState state)
-        {
-            //if (RTGFuelConfigList == null) 
-                ReadCustomConfigs ();
-            if (fuelIndex < 0)
-                updateFuelSetup (0);
-            updateOutput ();
+        { 
+            ReadCustomConfigs ();
+            if (this.fuelIndex < 0) {
+                this.updateFuelSetup (0);
+            }
+            this.updateOutput ();
             if (HighLogic.LoadedScene == GameScenes.FLIGHT) {
-                part.force_activate ();
+                this.part.force_activate ();
             }
         }
 
@@ -103,7 +101,8 @@ namespace JDiminishingRTG
         private static void ReadCustomConfigs()
         {
 			Debug.Log ("[JDimRTG] Reading configs...");
-            ReadRTGFuelConfigs ();
+            //ReadRTGFuelConfigs ();
+            RTGFuelConfigList = getRTGFuelConfigs (GameDatabase.Instance.GetConfigNodes("RTGFUELCONFIG"))
             try {
                 ReadJDiminishingRTGGlobalConfig ();
 			    Debug.Log ("[JDimRTG] ...reading configs done.");
@@ -160,21 +159,39 @@ namespace JDiminishingRTG
 			}
         }
 
-        private static void ReadRTGFuelConfigs ()
+//        private static void ReadRTGFuelConfigs ()
+//        {
+//            Debug.Log ("[JDimRTG] Reading RTG Fuel configs...");
+//            RTGFuelConfigList = new List<RTGFuelConfig> ();
+//            List<string> seenResources = new List<string> ();
+//            foreach (ConfigNode node in GameDatabase.Instance.GetConfigNodes("RTGFUELCONFIG")) {
+//                try {
+//                    RTGFuelConfig c = new RTGFuelConfig (node);
+//                    if (seenResources.Contains (c.resourceName))
+//                        continue;
+//                    RTGFuelConfigList.Add (new RTGFuelConfig (node));
+//                } catch (Exception e) {
+//                    Debug.LogError ("[JDimRTG] Cannot load all RTGFUELCONFIGs!\n" + e.ToString ());
+//                }
+//            }
+//        }
+        
+        private static List<RTGFuelConfig> getRTGFuelConfigs (Vector<T> database_config_nodes)
         {
 			Debug.Log ("[JDimRTG] Reading RTG Fuel configs...");
-            RTGFuelConfigList = new List<RTGFuelConfig> ();
-            List<string> seenResources = new List<string> ();
-            foreach (ConfigNode node in GameDatabase.Instance.GetConfigNodes("RTGFUELCONFIG")) {
+            List<RTGFuelConfig> config_list = new List<RTGFuelConfig> ();
+            List<string> seen_resources = new List<string> ();
+            foreach (ConfigNode node in database_config_nodes) {
                 try {
                     RTGFuelConfig c = new RTGFuelConfig (node);
-                    if (seenResources.Contains (c.resourceName))
+                    if (seen_resources.Contains (c.resourceName)) {
                         continue;
-                    RTGFuelConfigList.Add (new RTGFuelConfig (node));
+                    }
+                    config_list.Add (c);
                 } catch (Exception e) {
-                    Debug.LogError ("[JDimRTG] Cannot load all RTGFUELCONFIGs!\n" + e.ToString ());
+                    Debug.LogError ("[JDimRTG] Could not load RTGFUELCONFIG:\n" + e.ToString ());
                 }
-            }
+            return config_list
         }
         #endregion
 
@@ -207,8 +224,9 @@ namespace JDiminishingRTG
         private static void UpdateFuelSetupInPart (Part p, int index)
         {
             ModuleDiminishingRTG rtg = p.GetComponent<ModuleDiminishingRTG> ();
-            if (rtg == null) 
+            if (rtg == null) {
                 return;
+            }
             rtg.updateFuelSetup (index);
         }
 
@@ -226,8 +244,9 @@ namespace JDiminishingRTG
             if (oldFuelName != "") {
                 PartResource[] partResources = part.GetComponents<PartResource> ();
                 for (int i = 0; i < partResources.Length; i++) {
-                    if (partResources [i].resourceName == oldFuelName) 
+                    if (partResources [i].resourceName == oldFuelName) {
                         DestroyImmediate (partResources [i]);
+                    }
                 }
             }
             ConfigNode resourceNode = new ConfigNode ("RESOURCE");
@@ -243,47 +262,49 @@ namespace JDiminishingRTG
         #endregion
 
         #region operation
+        public override void OnUpdate ()
+        {
+            this.updateUIOutput(this.output, this.efficiency);
+        }
+        
         public override void OnFixedUpdate ()
         {
-            double now = Planetarium.GetUniversalTime ();
-            timeOfStart = (timeOfStart < 0) ? (float)now : timeOfStart;
-            double progress = Math.Pow (2, -(((float)now - timeOfStart) / (fuelHalflife * 9203545)));
+            float now = (float)Planetarium.GetUniversalTime ();
+            this.timeOfStart = (this.timeOfStart < 0) ? now : this.timeOfStart;
+            
+            PartResource rtg_res = this.getRTGResource(this.name);
+            if (!rtg_res) { 
+                Debug.LogError ("[JDimRTG] Module resource '" + name + "' has no matching PartResource");
+                return;
+            }
+            
+            double progress = Math.Pow (2, -((now - this.timeOfStart) / (this.fuelHalflife * 9203545)));
+            rtg_res.amount = rtg_res.maxAmount * progress
+            this.output = this.fuelPep * ((float)rtg_res.amount * this.fuelDensity) * HeatScale;
+            this.part.mass = this.mass - ((float)rtg_res.amount * this.fuelDensity);
+            this.updateUIOutput(this.output, this.efficiency);
 
-            updateRTGFuelAmount (progress);
-            updateOutput ();
+            //this.updateRTGFuelAmount (rtg_res, progress);
+            //this.updateOutput (rtg_res);
             if (GenerateElectricity) {
-                part.RequestResource ("ElectricCharge", -output * efficiency * TimeWarp.fixedDeltaTime);
+                this.part.RequestResource ("ElectricCharge", -this.output * this.efficiency * TimeWarp.fixedDeltaTime);
             }
             if (GenerateHeat) {
-                part.AddThermalFlux (output);
+                this.part.AddThermalFlux (this.output);
             }
-            updatePartMass ();
+            //this.updatePartMass (rtg_res);
         }
-
-        private void updateRTGFuelAmount (double progress)
-        {
-            foreach (PartResource res in part.GetComponents<PartResource> ()) {
-                if (res.resourceName == fuelName) 
-                    res.amount = res.maxAmount * progress;
-            }
-        }
-
-        private void updatePartMass ()
-        {
-            foreach (PartResource res in part.GetComponents<PartResource> ()) {
-                if (res.resourceName == fuelName) {
-                    part.mass = mass - ((float)res.amount * fuelDensity);
+        
+        private PartResource getRTGResource(string resname){
+            foreach (PartResource r in this.part.GetComponents<PartResource> ()) {
+                if (r.resourceName == resname) {
+                    return r;
                 }
             }
+            return null;
         }
-
-        private void updateOutput ()
-        {
-            foreach (PartResource res in part.GetComponents<PartResource> ()) {
-                if (res.resourceName == fuelName) {
-                    output = fuelPep * ((float)res.amount * fuelDensity) * HeatScale;
-                }
-            }
+        
+        private void updateUIOutput(float output, float efficiency) {
             float tmpout = output;
             string units = HeatUnits;
             if (GenerateElectricity) {
@@ -291,13 +312,55 @@ namespace JDiminishingRTG
                 units = ElectricityUnits;
             }
             if (tmpout < 1) {
-                Fields ["guiOutput"].guiUnits = " " + units + "/min";
-                guiOutput = String.Format ("{0:##.##}", tmpout * 60F);
+                units = units + "/min";
+                tmpout = tmpout * 60F;
             } else {
-                Fields ["guiOutput"].guiUnits = " " + units + "/s";
-                guiOutput = String.Format ("{0:##.##}", tmpout);
+                units = units + "/s";
             }
+            Fields ["guiOutput"].guiUnits = " " + units;
+            this.guiOutput = String.Format ("{0:##.##}", tmpout);
         }
+
+//        private void updateRTGFuelAmount (PartResource res, double progress)
+//        {
+            //foreach (PartResource res in part.GetComponents<PartResource> ()) {
+            //    if (res.resourceName == this.fuelName) {
+//                    res.amount = res.maxAmount * progress;
+            //    }
+            //}
+//        }
+
+//        private void updatePartMass (PartResource res)
+//        {
+            //foreach (PartResource res in this.part.GetComponents<PartResource> ()) {
+            //    if (res.resourceName == this.fuelName) {
+//                    this.part.mass = this.mass - ((float)res.amount * this.fuelDensity);
+            //    }
+            //}
+//        }
+
+//        private void updateOutput (PartResource res)
+//        {
+            //foreach (PartResource res in this.part.GetComponents<PartResource> ()) {
+            //    if (res.resourceName == this.fuelName) {
+//                    this.output = this.fuelPep * ((float)res.amount * this.fuelDensity) * HeatScale;
+            //        break;
+            //    }
+            //}
+//            float tmpout = this.output;
+//            string units = HeatUnits;
+//            if (GenerateElectricity) {
+//                tmpout = this.output * this.efficiency * ElectricityScale;
+//                units = ElectricityUnits;
+//            }
+//            if (tmpout < 1) {
+//                Fields ["guiOutput"].guiUnits = " " + units + "/min";
+//                this.guiOutput = String.Format ("{0:##.##}", tmpout * 60F);
+//            } else {
+//                Fields ["guiOutput"].guiUnits = " " + units + "/s";
+//                this.guiOutput = String.Format ("{0:##.##}", tmpout);
+//            }
+//        }
         #endregion
     }
 }
