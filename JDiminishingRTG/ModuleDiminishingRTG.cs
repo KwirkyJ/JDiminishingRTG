@@ -21,16 +21,12 @@ namespace JDiminishingRTG
         [KSPField(isPersistant = true)]
         public float efficiency = 0.5F;
 
-
         #region privateFields
-        [KSPField(guiName = "Fuel type", isPersistant = true, guiActiveEditor = true)]
+        [KSPField(guiName = "Fuel type", isPersistant = true, guiActiveEditor = true, guiActive = true)]
         private string fuelName;
 
-        [KSPField( guiName = "Half-life", isPersistant = true, guiActive = true, guiActiveEditor = true, guiUnits = " years")]
+        [KSPField(guiName = "Half-life", isPersistant = true, guiActive = true, guiActiveEditor = true, guiUnits = " years")]
         private float fuelHalflife = -1F; // time in Kerbin-years
-
-        [KSPField(isPersistant = true)]
-        private int fuelIndex = -1;
 
         [KSPField(isPersistant = true)]
         private float fuelPep = -1F;
@@ -49,7 +45,14 @@ namespace JDiminishingRTG
         [KSPField(guiName = "RTG mass", isPersistant = true, guiActiveEditor = true, guiUnits = " tonnes")]
         private float mass = -1F;
 
-        private UIPartActionWindow tweakableUI;
+		//[SerializeField] // changes a bug
+		[KSPField (guiName = "Fuel type", isPersistant = true, guiActiveEditor = true)]
+		[UI_ChooseOption (options = new[] {"none"}, affectSymCounterparts = UI_Scene.Editor, scene = UI_Scene.Editor)]//, suppressEditorShipModified = true)]
+		private int fuelSelectorIndex = 0;
+		#endregion
+
+		#region staticFields
+		private static bool AreConfigsRead = false;
 
         private static List<RTGFuelConfig> RTGFuelConfigList;
 
@@ -65,6 +68,8 @@ namespace JDiminishingRTG
 
         private static float HeatScale        = 1F;
         private static float ElectricityScale = 1F;
+
+		private static string[] FuelNames = new string[] {"None"};
         #endregion
 
         public override string GetInfo ()
@@ -86,16 +91,36 @@ namespace JDiminishingRTG
         }
 
         public override void OnStart (StartState state)
-        { 
-            ReadCustomConfigs ();
-            if (this.fuelIndex < 0) {
-                this.updateFuelSetup (0);
-            }
-            this.updateOutput ();
+		{ 
+			if (!AreConfigsRead) {
+				ReadCustomConfigs ();
+				PopulateFuelNames();
+			    AreConfigsRead = true;
+			}
+			if (HighLogic.LoadedScene == GameScenes.EDITOR) {
+				UI_Control c = this.Fields["fuelSelectorIndex"].uiControlEditor;
+				c.onFieldChanged = updateFuelSetup;
+				UI_ChooseOption o = (UI_ChooseOption)c;
+				o.options = FuelNames;
+				this.updateFuelSetup (this.fuelSelectorIndex);
+			}
+            this.updateUIOutput (this.fuelPep, this.efficiency);
             if (HighLogic.LoadedScene == GameScenes.FLIGHT) {
+				this.updateFuelSetup (this.fuelSelectorIndex);
                 this.part.force_activate ();
             }
         }
+
+		private static void PopulateFuelNames ()
+		{
+			int count = RTGFuelConfigList.Count;
+			string[] names = new string[count];
+			for (int i = 0; i < count; i++) {
+				RTGFuelConfig r = RTGFuelConfigList[i];
+				names[i] = r.resourceName;
+			}
+			FuelNames = names;
+		}
 
         #region configLoading
         //SEE http://docuwiki-kspapi.rhcloud.com/#/classes/UI_ChooseOption
@@ -103,163 +128,120 @@ namespace JDiminishingRTG
         private static void ReadCustomConfigs()
         {
 			Debug.Log ("[JDimRTG] Reading configs...");
-            //ReadRTGFuelConfigs ();
-            RTGFuelConfigList = getRTGFuelConfigs (GameDatabase.Instance.GetConfigNodes("RTGFUELCONFIG"))
+			RTGFuelConfigList = GetRTGFuelConfigs (GameDatabase.Instance.GetConfigNodes("RTGFUELCONFIG"));
             try {
-                ReadJDiminishingRTGGlobalConfig ();
-			    Debug.Log ("[JDimRTG] ...reading configs done.");
+				foreach (ConfigNode n in GameDatabase.Instance.GetConfigNodes ("JDIMINISHINGRTGGLOBALCONFIG")) {
+					ReadJDiminishingRTGGlobalConfig (n);
+				}
+                Debug.Log ("[JDimRTG] ...reading configs done.");
             } catch (Exception e) {
                 Debug.LogError("[JDimRTG] Problem in reading global config!\n" + e.ToString ());
             }
         }
 
-        private static void ReadJDiminishingRTGGlobalConfig ()
+        private static List<RTGFuelConfig> GetRTGFuelConfigs (ConfigNode[] database_rtgfuelnodes)
 		{
-			foreach (ConfigNode n in GameDatabase.Instance.GetConfigNodes ("JDIMINISHINGRTGGLOBALCONFIG")) {
-				Debug.Log ("[JDimRTG] Reading global config...");
-				if (n.HasValue ("GenerateHeat")) {
-					GenerateHeat = bool.Parse (n.GetValue ("GenerateHeat"));
-					Debug.Log ("[JDimRTG] GenerateHeat = " + GenerateHeat);
-				}
-				if (!GenerateHeat) {
-					GenerateElectricity = true;
-				} else if (n.HasValue ("GenerateElectricity")) {
-					GenerateElectricity = bool.Parse (n.GetValue ("GenerateElectricity"));
-					Debug.Log ("[JDimRTG] GenerateElectricity = " + GenerateElectricity);
-				}
-
-				if (n.HasValue ("PowerDensityFactor")) {
-					PowerDensityFactor = float.Parse (n.GetValue ("PowerDensityFactor"));
-					Debug.Log ("[JDimRTG] PowerDensityFactor = " + PowerDensityFactor);
-				}
-				if (n.HasValue ("PowerDensityLabel")) {
-					PowerDensityLabel = n.GetValue ("PowerDensityLabel");
-					Debug.Log ("[JDimRTG] PowerDensityLabel = " + PowerDensityLabel);
-				}
-				if (n.HasValue ("PowerDensityUnits")) {
-					PowerDensityUnits = n.GetValue ("PowerDensityUnits");
-					Debug.Log ("[JDimRTG] PowerDensityUnits = " + PowerDensityUnits);
-				}
-
-				if (n.HasValue ("HeatUnits")) {
-					HeatUnits = n.GetValue ("HeatUnits");
-					Debug.Log ("[JDimRTG] HeatUnits = " + HeatUnits);
-				}
-				if (n.HasValue ("ElectricityUnits")) {
-					ElectricityUnits = n.GetValue ("ElectricityUnits");
-					Debug.Log ("[JDimRTG] ElectricityUnits = " + ElectricityUnits);
-				}
-
-				if (n.HasValue ("HeatScale")) {
-					HeatScale = float.Parse (n.GetValue ("HeatScale"));
-					Debug.Log ("[JDimRTG] HeatScale = " + HeatScale);
-				}
-				if (n.HasValue ("ElectricityScale")) {
-					ElectricityScale = float.Parse (n.GetValue ("ElectricityScale"));
-					Debug.Log ("[JDimRTG] ElectricityScale = " + ElectricityScale);
+			Debug.Log ("[JDimRTG] Reading RTG Fuel configs...");
+			List<RTGFuelConfig> config_list = new List<RTGFuelConfig> ();
+			List<string> seen_resources = new List<string> ();
+			foreach (ConfigNode node in database_rtgfuelnodes) {
+				try {
+					RTGFuelConfig c = new RTGFuelConfig (node);
+					if (!seen_resources.Contains (c.resourceName)) {
+					    config_list.Add (c);
+					    seen_resources.Add (c.resourceName);
+					}
+				} catch (Exception e) {
+					Debug.LogError ("[JDimRTG] Could not load RTGFUELCONFIG:\n" + e.ToString ());
 				}
 			}
+			return config_list;
         }
 
-//        private static void ReadRTGFuelConfigs ()
-//        {
-//            Debug.Log ("[JDimRTG] Reading RTG Fuel configs...");
-//            RTGFuelConfigList = new List<RTGFuelConfig> ();
-//            List<string> seenResources = new List<string> ();
-//            foreach (ConfigNode node in GameDatabase.Instance.GetConfigNodes("RTGFUELCONFIG")) {
-//                try {
-//                    RTGFuelConfig c = new RTGFuelConfig (node);
-//                    if (seenResources.Contains (c.resourceName))
-//                        continue;
-//                    RTGFuelConfigList.Add (new RTGFuelConfig (node));
-//                } catch (Exception e) {
-//                    Debug.LogError ("[JDimRTG] Cannot load all RTGFUELCONFIGs!\n" + e.ToString ());
-//                }
-//            }
-//        }
-        
-        private static List<RTGFuelConfig> getRTGFuelConfigs (Vector<T> database_config_nodes)
-        {
-			Debug.Log ("[JDimRTG] Reading RTG Fuel configs...");
-            List<RTGFuelConfig> config_list = new List<RTGFuelConfig> ();
-            List<string> seen_resources = new List<string> ();
-            foreach (ConfigNode node in database_config_nodes) {
-                try {
-                    RTGFuelConfig c = new RTGFuelConfig (node);
-                    if (seen_resources.Contains (c.resourceName)) {
-                        continue;
-                    }
-                    config_list.Add (c);
-                } catch (Exception e) {
-                    Debug.LogError ("[JDimRTG] Could not load RTGFUELCONFIG:\n" + e.ToString ());
-                }
-            return config_list
+        private static void ReadJDiminishingRTGGlobalConfig (ConfigNode n)
+		{
+			Debug.Log ("[JDimRTG] Reading RTG global config...");
+			if (n.HasValue ("GenerateHeat")) {
+				GenerateHeat = bool.Parse (n.GetValue ("GenerateHeat"));
+				Debug.Log ("[JDimRTG] GenerateHeat = " + GenerateHeat);
+			}
+			if (!GenerateHeat) {
+				GenerateElectricity = true;
+			} else if (n.HasValue ("GenerateElectricity")) {
+				GenerateElectricity = bool.Parse (n.GetValue ("GenerateElectricity"));
+				Debug.Log ("[JDimRTG] GenerateElectricity = " + GenerateElectricity);
+			}
+
+			if (n.HasValue ("PowerDensityFactor")) {
+				PowerDensityFactor = float.Parse (n.GetValue ("PowerDensityFactor"));
+				Debug.Log ("[JDimRTG] PowerDensityFactor = " + PowerDensityFactor);
+			}
+			if (n.HasValue ("PowerDensityLabel")) {
+				PowerDensityLabel = n.GetValue ("PowerDensityLabel");
+				Debug.Log ("[JDimRTG] PowerDensityLabel = " + PowerDensityLabel);
+			}
+			if (n.HasValue ("PowerDensityUnits")) {
+				PowerDensityUnits = n.GetValue ("PowerDensityUnits");
+				Debug.Log ("[JDimRTG] PowerDensityUnits = " + PowerDensityUnits);
+			}
+
+			if (n.HasValue ("HeatUnits")) {
+				HeatUnits = n.GetValue ("HeatUnits");
+				Debug.Log ("[JDimRTG] HeatUnits = " + HeatUnits);
+			}
+			if (n.HasValue ("ElectricityUnits")) {
+				ElectricityUnits = n.GetValue ("ElectricityUnits");
+				Debug.Log ("[JDimRTG] ElectricityUnits = " + ElectricityUnits);
+			}
+
+			if (n.HasValue ("HeatScale")) {
+				HeatScale = float.Parse (n.GetValue ("HeatScale"));
+				Debug.Log ("[JDimRTG] HeatScale = " + HeatScale);
+			}
+			if (n.HasValue ("ElectricityScale")) {
+				ElectricityScale = float.Parse (n.GetValue ("ElectricityScale"));
+				Debug.Log ("[JDimRTG] ElectricityScale = " + ElectricityScale);
+			}
         }
         #endregion
 
-        #region configurationLogic 
-        // this region derived from Firespitter
-        [KSPEvent(guiActiveEditor = true, guiName = "Next fuel type")]
-        public void nextFuelConfiguration ()
-        {
-            int newFuelIndex = (fuelIndex + 1 >= RTGFuelConfigList.Count) 
-                               ? 0 : fuelIndex + 1;
-            updateFuelSetup (newFuelIndex);
-            foreach (Part sympart in this.part.symmetryCounterparts) {
-                UpdateFuelSetupInPart (sympart, newFuelIndex);
-            }
-            updateActivePartUI ();
-        }
-
-        private void updateActivePartUI ()
-        {
-            if (tweakableUI == null) {
-                tweakableUI = ToolsBeta.FindActionWindow (this.part);
-            }
-            if (tweakableUI != null) {
-                tweakableUI.displayDirty = true;
-            } else {
-                Debug.Log ("[JDimRTG] no UI to refresh");
-            }
-        }
-        
-        private static void UpdateFuelSetupInPart (Part p, int index)
-        {
-            ModuleDiminishingRTG rtg = p.GetComponent<ModuleDiminishingRTG> ();
-            if (rtg == null) {
-                return;
-            }
-            rtg.updateFuelSetup (index);
-        }
+        #region configurationLogic
+		public void updateFuelSetup (BaseField field, object oldValue)
+		{
+			this.updateFuelSetup (this.fuelSelectorIndex);
+		}
 
         private void updateFuelSetup (int index)
         {
-            string oldFuelName = fuelName;
-            RTGFuelConfig config = RTGFuelConfigList [index];
-            fuelIndex = index;
-            fuelName = config.resourceName;
-            fuelHalflife = config.halflife;
-            fuelPep = config.pep;
-            fuelDensity = config.density;
-
-            part.Resources.list.Clear ();
-            if (oldFuelName != "") {
-                PartResource[] partResources = part.GetComponents<PartResource> ();
-                for (int i = 0; i < partResources.Length; i++) {
-                    if (partResources [i].resourceName == oldFuelName) {
-                        DestroyImmediate (partResources [i]);
-                    }
-                }
+			foreach (RTGFuelConfig possibleFuel in RTGFuelConfigList) {
+				List<PartResource> resources = this.part.Resources.list;
+				int i = 0;
+				while (resources[i] != null) {
+					PartResource r = resources[i];
+					if (r.resourceName == possibleFuel.resourceName) {
+						resources.Remove (r);
+						Destroy (r);
+					} else {
+						i++;
+					}
+				}
             }
+
+            RTGFuelConfig config = RTGFuelConfigList[index];
+            this.fuelName     = config.resourceName;
+            this.fuelHalflife = config.halflife;
+            this.fuelPep      = config.pep;
+            this.fuelDensity  = config.density;
+
             ConfigNode resourceNode = new ConfigNode ("RESOURCE");
-            resourceNode.AddValue ("name", fuelName);
-            resourceNode.AddValue ("maxAmount", volume);
-            resourceNode.AddValue ("amount", volume);
+            resourceNode.AddValue ("name", this.fuelName);
+            resourceNode.AddValue ("maxAmount", this.volume);
+            resourceNode.AddValue ("amount", this.volume);
             resourceNode.AddValue ("isTweakable", false);
-            part.AddResource (resourceNode);
-            part.Resources.UpdateList ();
-            mass = part.mass + part.GetResourceMass ();
-            updateOutput ();
+            this.part.AddResource (resourceNode);
+
+            this.mass = this.part.mass + this.part.GetResourceMass ();
+            this.updateUIOutput (this.fuelPep, this.volume * this.fuelDensity);
         }
         #endregion
 
@@ -291,80 +273,36 @@ namespace JDiminishingRTG
             float now = (float)Planetarium.GetUniversalTime ();
             this.timeOfStart = (this.timeOfStart < 0) ? now : this.timeOfStart;
             
-            //PartResource rtg_res = this.getRTGResource(this.name);
-            PartResource rtg_res = this.part.Resources.Where(r => r.resourceName == this.name);
-            if (!rtg_res) { 
-                Debug.LogError ("[JDimRTG] Module resource '" + name + "' has no matching PartResource");
+            PartResource r = this.getRTGResource(this.fuelName);
+            if (r == null) { 
+                Debug.LogError ("[JDimRTG] Module resource '" + this.fuelName + "' has no matching PartResource");
                 return;
             }
             
             double progress = Math.Pow (2, -((now - this.timeOfStart) / (this.fuelHalflife * 9203545)));
-            rtg_res.amount = rtg_res.maxAmount * progress
-            this.output = this.fuelPep * ((float)rtg_res.amount * this.fuelDensity) * HeatScale;
-            this.part.mass = this.mass - ((float)rtg_res.amount * this.fuelDensity);
-            //this.updateUIOutput(this.output, this.efficiency);
-
-            //this.updateRTGFuelAmount (rtg_res, progress);
-            //this.updateOutput (rtg_res);
+            r.amount = r.maxAmount * progress;
+			this.output = getOutput (this.fuelPep, (float)r.amount * this.fuelDensity);
+			this.part.mass = this.mass;
             if (GenerateElectricity) {
                 this.part.RequestResource ("ElectricCharge", -this.output * this.efficiency * TimeWarp.fixedDeltaTime);
             }
             if (GenerateHeat) {
                 this.part.AddThermalFlux (this.output);
             }
-            //this.updatePartMass (rtg_res);
         }
         
-//        private PartResource getRTGResource (string resname) {
-        //    foreach (PartResource r in this.part.Resources.list) {
-        //        if (r.resourceName == resname) {
-        //            return r;
-        //        }
-        //    }
-        //    return null;
-//            return this.part.Resources.list.where(r => r.resourceName == resname)
-//        }
+       private PartResource getRTGResource (string resname) {
+            foreach (PartResource r in this.part.Resources.list) {
+                if (r.resourceName == resname) {
+                    return r;
+                }
+            }
+            return null;
+        }
 
-//        private void updateRTGFuelAmount (PartResource res, double progress)
-//        {
-            //foreach (PartResource res in part.GetComponents<PartResource> ()) {
-            //    if (res.resourceName == this.fuelName) {
-//                    res.amount = res.maxAmount * progress;
-            //    }
-            //}
-//        }
-
-//        private void updatePartMass (PartResource res)
-//        {
-            //foreach (PartResource res in this.part.GetComponents<PartResource> ()) {
-            //    if (res.resourceName == this.fuelName) {
-//                    this.part.mass = this.mass - ((float)res.amount * this.fuelDensity);
-            //    }
-            //}
-//        }
-
-//        private void updateOutput (PartResource res)
-//        {
-            //foreach (PartResource res in this.part.GetComponents<PartResource> ()) {
-            //    if (res.resourceName == this.fuelName) {
-//                    this.output = this.fuelPep * ((float)res.amount * this.fuelDensity) * HeatScale;
-            //        break;
-            //    }
-            //}
-//            float tmpout = this.output;
-//            string units = HeatUnits;
-//            if (GenerateElectricity) {
-//                tmpout = this.output * this.efficiency * ElectricityScale;
-//                units = ElectricityUnits;
-//            }
-//            if (tmpout < 1) {
-//                Fields ["guiOutput"].guiUnits = " " + units + "/min";
-//                this.guiOutput = String.Format ("{0:##.##}", tmpout * 60F);
-//            } else {
-//                Fields ["guiOutput"].guiUnits = " " + units + "/s";
-//                this.guiOutput = String.Format ("{0:##.##}", tmpout);
-//            }
-//        }
+		private float getOutput (float pep, float res_mass) {
+			return pep * res_mass * HeatScale;
+		}
         #endregion
     }
 }

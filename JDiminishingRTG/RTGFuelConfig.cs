@@ -25,11 +25,11 @@ namespace JDiminishingRTG
             }
             this.resourceName = node.GetValue ("name");
             ConfigNode resource_node = getResourceConfigNode(this.resourceName);
-            if (!resource_node) {
+            if (resource_node == null) {
                 throw new MissingFieldException ("resource '" + this.resourceName + "' not matched in gamedatabase");
             }
             this.density  = float.Parse (resource_node.GetValue ("density"));
-            this.halflife = (node.hasValue ("halflife")) ? float.Parse (node.GetValue ("halflife"))
+            this.halflife = (node.HasValue ("halflife")) ? float.Parse (node.GetValue ("halflife"))
                                                          : DEFAULT_HALFLIFE;
             this.pep = (node.HasValue ("pep")) ? 1000F * float.Parse (node.GetValue ("pep"))
                                                : DEFAULT_PEP;
